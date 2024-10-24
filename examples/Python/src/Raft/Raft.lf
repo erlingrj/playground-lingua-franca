@@ -1,0 +1,78 @@
+target Python {
+  coordination: decentralized
+}
+
+reactor Node {
+  input leaderHeartbeatIn
+  output leaderHeartbeatOut
+
+  input voteResponseIn
+  output voteResponseOut
+
+  input voteRequestIn
+  output voteRequestOut
+
+  input appendEntryIn
+  output appendEntryOut
+
+  input ackAppendEntryIn
+  output ackAppendEntryOut
+
+  input set
+
+  logical action electionTimeoutAction
+
+  state electionTimeout = 1 sec
+  state nextElecetionTimeout
+  state term = 0
+
+  reaction(startup) {=
+    print(f"Hello, Raft!")
+  =}
+  
+  initial mode Follower {
+    reaction(voteRequestIn) -> voteResponseOut {=
+      print(f"Received vote request from {voteRequest.sender}")
+      voteResponseOut.send(voteRequest.sender)
+    =}
+
+    reaction(leaderHeartbeatIn) -> electionTimeoutAction {=
+      print(f"Received heartbeat from {leaderHeartbeat.sender}")
+      self.nextElectionTimeout = lf.time.logical() + electionTimeout
+    =}
+
+    reaction(electionTimeoutAction) -> reset(Candidate) {=
+      print(f"Election timeout!")
+    =}
+  }
+
+  mode Candidate {
+    state votes = 0
+    reaction(reset) -> voteRequestOut {=
+      votes = 0
+      term += 1
+      requestVoteOut.send(term)
+    =}
+
+    reaction(voteRequestIn) -> Follower {=
+
+    =}
+
+    reaction(voteResponseIn) -> reset(Leader) {=
+      print(f"Received vote response from {voteResponse.sender}")
+    =}
+  }
+  mode Leader {
+    timer heartbeatTimer(0, 100msec)
+    reaction(heartbeatTimer) -> leaderHeartbeatOut {=
+      print(f"Sending heartbeat")
+    =}
+    reaction(set) -> appendEntryOut {=
+
+    =}
+  }
+}
+
+federated reactor {
+  r = new Node()
+}
